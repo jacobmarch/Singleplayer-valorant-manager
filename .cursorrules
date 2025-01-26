@@ -1,0 +1,6 @@
+After any changes, update the README.md file with the changes.
+
+The README.md file should be referenced before any changes are made to the code.
+
+When making changes to the code, only make changes to the code that are necessary to implement the changes.Do not edit any other part of the code unless it is necessary to implement the changes.
+Always add logging and comments to the code to explain the changes. Explanantions should be made so that the code can be easily referenced by an engineer.
