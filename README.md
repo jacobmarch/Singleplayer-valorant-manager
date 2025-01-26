@@ -9,42 +9,51 @@ This game is inspired by Football Manager but focuses on the unique aspects of m
 ## Technical Stack
 
 - **Language**: Python
-- **UI**: Terminal-based using Rich Console
+- **UI**: Rich Console for enhanced terminal UI
 - **Database**: SQLite
 - **Mode**: Single-player
 
 ## Project Structure
-alorant-team-manager/
-├── main.py # Application entry point
-├── database/ # Database related modules
-│ ├── init.py
-│ ├── db_manager.py # Database connection and operations
-│ └── models.py # SQLite database models
-├── entities/ # Game entity classes
-│ ├── init.py
-│ ├── player.py # Player class and attributes
-│ ├── team.py # Team management
-│ ├── coach.py # Coach management
-├── game/ # Core game logic
-│ ├── init.py
-│ ├── calendar.py # In-game time management
-│ ├── game_state.py # Game state tracking
-│ └── events/ # Game events
-│ ├── init.py
-│ ├── random_events.py
-│ ├── team_events.py
-│ └── player_events.py
-├── ui/ # User interface
-│ ├── init.py
-│ ├── console.py # Rich console setup
-│ ├── displays.py # UI display components
-│ └── menus.py # Menu systems
-└── utils/ # Utility functions
-├── init.py
-├── config.py # Configuration settings
-└── constants.py # Game constants
+```
+valorant-team-manager/
+├── src/
+│   ├── ui/
+│   │   └── console_manager.py  # UI-related functionality
+│   ├── utils/
+│   │   └── logger.py          # Logging configuration
+│   └── game/
+│       └── game_manager.py    # Game logic and flow
+├── main.py                    # Application entry point
+└── README.md
+```
+
+## Code Organization
+
+The project follows a modular structure where:
+- `main.py` serves only as the entry point and doesn't contain any function or class definitions
+- All game logic is organized into appropriate modules under the `src/` directory
+- UI components are separated from game logic
+- Utility functions (like logging) are isolated in their own modules
+
+### Module Responsibilities
+
+- **console_manager.py**: Handles all UI-related functionality and terminal display
+- **logger.py**: Manages logging configuration and setup
+- **game_manager.py**: Contains core game logic and flow control
+
+This modular structure allows for:
+- Better code organization and maintainability
+- Easier testing and debugging
+- Clear separation of concerns
+- Simplified future expansions
 
 ## Core Features
+
+### User Interface
+- Enhanced terminal-based UI using Rich Console
+- Styled menus and information panels
+- Clear visual hierarchy and navigation
+- Color-coded information display
 
 ### Team Management
 - Full roster management
@@ -97,92 +106,32 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
-### Logging System
-- Development mode: `ENABLE_LOGGING = False`
-- Production mode: `ENABLE_LOGGING = True`
-- Log files stored in `logs/` directory
-- Daily log rotation: `app_YYYYMMDD.log`
-
 ### Error Handling
 - Comprehensive error logging
 - Stack trace capture
 - Graceful error recovery
 
-## Project Structure
+## Setup and Structure
 
-### Entities Package
-The `entities` package contains the core domain entities for the valorant team manager game.
+### Main Entry Point
+The game can be launched through `main.py`, which provides the following options:
+- Create a new game
+- Load an existing game
+- Quit the game
 
-Available Entities:
-- `Team`: Represents a valorant team with properties for name, players, coach, region, and fan base
-- `Player`: Represents a player with attributes including:
-  - Personal details (name, age, nationality, nickname)
-  - Role and team affiliation
-  - Contract status (expiry, salary, value)
-  - Status flags (injured, suspended)
-- `Coach`: Represents a team coach with name and team association
+### Logging
+The application includes comprehensive logging functionality:
+- Log files are stored in a 'logs' directory
+- Logs include timestamps and log levels
+- Separate logging for game events and errors
+- Console output is focused on user interface only
 
-Usage:
-```python
-from entities import Team, Player, Coach
+#### Logging System
+- Development mode: `ENABLE_LOGGING = False`
+- Production mode: `ENABLE_LOGGING = True`
+- Log files stored in `logs/` directory
+- Daily log rotation: `app_YYYYMMDD.log`
 
-# Create a new player
-player = Player(
-    first_name="John",
-    last_name="Doe",
-    age=22,
-    role="Duelist",
-    nationality="USA",
-    nickname="JD"
-)
-
-# Create a team
-team = Team(
-    name="Team Ace",
-    players=[],
-    coach=None,
-    region="NA",
-    fans=10000
-)
-
-
-```
-
-## Logging
-The application includes comprehensive logging functionality that can be enabled/disabled through the `ENABLE_LOGGING` flag in `main.py`.
-
-### UI Package
-The `ui` package provides the terminal-based user interface components for the game.
-
-Components:
-- `Console`: Core console I/O operations wrapper
-  - Screen clearing
-  - Formatted output
-  - User input handling
-  - Header formatting
-- `Menu`: Menu system implementation
-  - Menu items with key bindings
-  - Action callbacks
-  - Input validation
-- `GameDisplay`: Game-specific display components
-  - New game creation interface
-  - Game loading interface
-  - (More displays to be added)
-
-Usage Example:
-```python
-from ui import Console, Menu, MenuItem, GameDisplay
-
-# Create menu items
-menu_items = [
-    MenuItem("1", "New Game", GameDisplay.create_new_game),
-    MenuItem("2", "Load Game", GameDisplay.load_game),
-    MenuItem("q", "Quit", exit)
-]
-
-# Create and display menu
-main_menu = Menu("Main Menu", menu_items)
-main_menu.display()
-```
-
----
+## Dependencies
+- Rich: For enhanced terminal user interface
+- Other dependencies listed in requirements.txt
