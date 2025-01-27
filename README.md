@@ -23,7 +23,8 @@ valorant-team-manager/
 │ ├── utils/
 │ │ └── logger.py # Logging system
 │ └── game/
-│ └── game_manager.py # Core game engine
+│ │ └── game_manager.py # Core game engine
+│ │ └── data.py # Game data
 ├── main.py # Entry point
 └── README.md
 
