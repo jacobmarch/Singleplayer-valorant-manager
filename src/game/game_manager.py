@@ -1,21 +1,82 @@
 import logging
 from rich.prompt import Prompt
+from rich.table import Table
 from src.ui.console_manager import ConsoleManager
+from src.game.data import REGIONS, REGION_LIST
 
 class GameManager:
     def __init__(self):
         self.console = ConsoleManager()
+        self.selected_region = None
+        self.selected_team = None
+
+    def display_region_selection(self):
+        """
+        Display available regions in a table format.
+        """
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        for idx, region in enumerate(REGION_LIST, 1):
+            table.add_row(f"[menu_option]{idx}.[/menu_option]", f"[white]{region}[/white]")
+        return table
+
+    def display_team_selection(self, region):
+        """
+        Display teams from the selected region in a table format.
+        """
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        teams = REGIONS[region]
+        for idx, team in enumerate(teams, 1):
+            table.add_row(f"[menu_option]{idx}.[/menu_option]", f"[white]{team}[/white]")
+        return table
 
     def create_new_game(self):
         """
-        Initialize a new game session.
+        Initialize a new game session with region and team selection.
         """
         logging.info('Creating new game session')
         self.console.clear_screen()
         self.console.display_header()
-        self.console.console.print("\n[info]Starting new game...[/info]")
-        # TODO: Implement new game creation
-        self.console.console.print("[yellow]New game creation will be implemented soon[/yellow]")
+        
+        # Region Selection
+        self.console.console.print("\n[menu_title]Select Your Region[/menu_title]")
+        self.console.console.print(self.display_region_selection())
+        
+        try:
+            region_choice = Prompt.ask(
+                "\nEnter your choice",
+                choices=[str(i) for i in range(1, len(REGION_LIST) + 1)],
+                show_choices=False
+            )
+            self.selected_region = REGION_LIST[int(region_choice) - 1]
+            logging.info(f'User selected region: {self.selected_region}')
+            
+            # Team Selection
+            self.console.clear_screen()
+            self.console.display_header()
+            self.console.console.print(f"\n[menu_title]Select Your Team from {self.selected_region}[/menu_title]")
+            self.console.console.print(self.display_team_selection(self.selected_region))
+            
+            team_choice = Prompt.ask(
+                "\nEnter your choice",
+                choices=[str(i) for i in range(1, len(REGIONS[self.selected_region]) + 1)],
+                show_choices=False
+            )
+            self.selected_team = REGIONS[self.selected_region][int(team_choice) - 1]
+            logging.info(f'User selected team: {self.selected_team}')
+            
+            # Confirmation message
+            self.console.clear_screen()
+            self.console.display_header()
+            self.console.console.print(f"\n[green]You have selected {self.selected_team} from {self.selected_region}![/green]")
+            
+        except KeyboardInterrupt:
+            logging.info('User interrupted team selection')
+            self.console.console.print("\n[warning]Team selection interrupted[/warning]")
+            return
+        except Exception as e:
+            logging.error(f'Error during team selection: {str(e)}')
+            self.console.console.print("\n[error]An error occurred during team selection[/error]")
+            return
 
     def load_game(self):
         """
