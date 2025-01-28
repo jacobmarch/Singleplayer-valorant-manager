@@ -25,6 +25,7 @@ valorant-team-manager/
 │ └── game/
 │ │ └── game_manager.py # Core game engine
 │ │ └── data.py # Game data
+│ │ └── person.py # Player and coach generation
 ├── main.py # Entry point
 └── README.md
 
@@ -36,6 +37,7 @@ valorant-team-manager/
 | Game Engine | `game_manager.py` | Game loop, state management, event handling |
 | UI Manager | `console_manager.py` | Terminal rendering, user input, display formatting |
 | Logger | `logger.py` | Error tracking, event logging, debugging support |
+| Player and Coach | `person.py` | Classes and functions for player and coach generation |
 
 ### Design Principles
 - Strict separation of concerns (UI/Logic/Utils)
@@ -105,3 +107,17 @@ valorant-team-manager/
 
 ## About
 A text-based Valorant team management simulator inspired by Football Manager, focusing on professional esports team management and strategic decision-making.
+
+## Recent Updates
+- Added player and coach generation system
+- Each team now gets 5 players (one for each position) and a coach
+- Each person has a randomly generated name and skill rating (1-100)
+- Added display of team members in formatted tables
+
+## Project Structure
+- `src/game/person.py`: Contains classes and functions for player and coach generation
+- `src/game/game_manager.py`: Main game management logic
+- `data/`: Contains name data files for generating random names
+
+## Requirements
+- Name data files (`first_names.txt` and `last_names.txt`) in the `data` directory

@@ -3,12 +3,16 @@ from rich.prompt import Prompt
 from rich.table import Table
 from src.ui.console_manager import ConsoleManager
 from src.game.data import REGIONS, REGION_LIST
+from src.game.person import Player, Coach, generate_team_members
+from typing import List, Optional
 
 class GameManager:
     def __init__(self):
         self.console = ConsoleManager()
         self.selected_region = None
         self.selected_team = None
+        self.players: Optional[List[Player]] = None
+        self.coach: Optional[Coach] = None
 
     def display_region_selection(self):
         """
@@ -28,6 +32,56 @@ class GameManager:
         for idx, team in enumerate(teams, 1):
             table.add_row(f"[menu_option]{idx}.[/menu_option]", f"[white]{team}[/white]")
         return table
+
+    def display_team_members(self):
+        """Display the generated team members in a table format"""
+        if not self.players or not self.coach:
+            return
+
+        # Create players table
+        players_table = Table(title="Team Players", show_header=True)
+        players_table.add_column("Position")
+        players_table.add_column("Name")
+        players_table.add_column("Skill Rating")
+
+        for player in self.players:
+            players_table.add_row(
+                player.position,
+                f"{player.first_name} {player.last_name}",
+                str(player.skill_rating)
+            )
+
+        # Create coach table
+        coach_table = Table(title="Team Coach", show_header=True)
+        coach_table.add_column("Name")
+        coach_table.add_column("Skill Rating")
+        coach_table.add_row(
+            f"{self.coach.first_name} {self.coach.last_name}",
+            str(self.coach.skill_rating)
+        )
+
+        return players_table, coach_table
+
+    def generate_team_members(self):
+        """Generate random players and coach for the team"""
+        logging.info('Generating team members')
+        
+        # Load name data
+        try:
+            with open('data/first_names.txt', 'r') as f:
+                first_names = [line.strip() for line in f.readlines()]
+            with open('data/last_names.txt', 'r') as f:
+                last_names = [line.strip() for line in f.readlines()]
+                
+            self.players, self.coach = generate_team_members(first_names, last_names)
+            logging.info(f'Generated {len(self.players)} players and 1 coach')
+            
+        except FileNotFoundError as e:
+            logging.error(f'Name data files not found: {str(e)}')
+            raise
+        except Exception as e:
+            logging.error(f'Error generating team members: {str(e)}')
+            raise
 
     def create_new_game(self):
         """
@@ -64,18 +118,27 @@ class GameManager:
             self.selected_team = REGIONS[self.selected_region][int(team_choice) - 1]
             logging.info(f'User selected team: {self.selected_team}')
             
-            # Confirmation message
+            # After team selection
+            self.generate_team_members()
+            
+            # Display team information
             self.console.clear_screen()
             self.console.display_header()
             self.console.console.print(f"\n[green]You have selected {self.selected_team} from {self.selected_region}![/green]")
+            
+            players_table, coach_table = self.display_team_members()
+            self.console.console.print("\n")
+            self.console.console.print(players_table)
+            self.console.console.print("\n")
+            self.console.console.print(coach_table)
             
         except KeyboardInterrupt:
             logging.info('User interrupted team selection')
             self.console.console.print("\n[warning]Team selection interrupted[/warning]")
             return
         except Exception as e:
-            logging.error(f'Error during team selection: {str(e)}')
-            self.console.console.print("\n[error]An error occurred during team selection[/error]")
+            logging.error(f'Error during team creation: {str(e)}')
+            self.console.console.print("\n[error]An error occurred during team creation[/error]")
             return
 
     def load_game(self):
