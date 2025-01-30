@@ -26,6 +26,7 @@ valorant-team-manager/
 │ │ └── game_manager.py # Core game engine
 │ │ └── data.py # Game data
 │ │ └── person.py # Player and coach generation
+│ │ └── roster.py # League management and scheduling
 ├── main.py # Entry point
 └── README.md
 
@@ -38,6 +39,7 @@ valorant-team-manager/
 | UI Manager | `console_manager.py` | Terminal rendering, user input, display formatting |
 | Logger | `logger.py` | Error tracking, event logging, debugging support |
 | Player and Coach | `person.py` | Classes and functions for player and coach generation |
+| League Manager | `roster.py` | Team ratings, match scheduling, league management |
 
 ### Design Principles
 - Strict separation of concerns (UI/Logic/Utils)
@@ -101,6 +103,13 @@ valorant-team-manager/
   - Contract handling
   - Development progression
 
+- **League Systems**
+  - Team ratings (0-100 scale)
+  - Round-robin match scheduling
+  - Win/loss record tracking
+  - League standings
+  - Match history
+
 ## Dependencies
 - **Rich**: Terminal UI framework
 - Full list in `requirements.txt`
@@ -109,14 +118,19 @@ valorant-team-manager/
 A text-based Valorant team management simulator inspired by Football Manager, focusing on professional esports team management and strategic decision-making.
 
 ## Recent Updates
+- Added league management system with team ratings and scheduling
+- Each team now has a rating from 0-100 (normally distributed)
+- Implemented round-robin schedule generation for matches
+- Added display of team ratings and upcoming matches
 - Added player and coach generation system
-- Each team now gets 5 players (one for each position) and a coach
+- Each team gets 5 players (one for each position) and a coach
 - Each person has a randomly generated name and skill rating (1-100)
 - Added display of team members in formatted tables
 
 ## Project Structure
 - `src/game/person.py`: Contains classes and functions for player and coach generation
 - `src/game/game_manager.py`: Main game management logic
+- `src/game/roster.py`: League management and scheduling system
 - `data/`: Contains name data files for generating random names
 
 ## Requirements
