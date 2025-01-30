@@ -130,13 +130,19 @@ class GameManager:
 
         return table
 
-    def display_schedule(self):
-        """Display the complete season schedule in a table format"""
+    def display_full_schedule(self, team_only: bool = False):
+        """
+        Display the complete season schedule including past results and upcoming matches
+        
+        Args:
+            team_only: If True, only show matches involving the user's team
+        """
         if not self.league_manager:
             return None
 
+        title = "Your Team's Schedule" if team_only else "Full League Schedule"
         table = Table(
-            title="Season Schedule",
+            title=title,
             show_header=True,
             header_style="bold",
             box=None,
@@ -144,19 +150,39 @@ class GameManager:
         )
         table.add_column("Week", justify="center")
         table.add_column("Home Team", justify="right")
-        table.add_column("vs", justify="center")
+        table.add_column("Score", justify="center")
         table.add_column("Away Team", justify="left")
+        table.add_column("Status", justify="center")
 
-        upcoming_matches = self.league_manager.display_upcoming_matches()
-        for match in upcoming_matches:
+        # Sort matches by week
+        sorted_matches = sorted(self.league_manager.schedule, key=lambda x: x.week)
+        current_week = self.get_current_week()
+
+        for match in sorted_matches:
+            # Skip if team_only is True and match doesn't involve user's team
+            if team_only and self.selected_team not in [match.home_team, match.away_team]:
+                continue
+                
             home_style = "[green]" if match.home_team == self.selected_team else "[white]"
             away_style = "[green]" if match.away_team == self.selected_team else "[white]"
+            
+            # Format score/status based on match completion
+            if match.completed:
+                score = f"{match.home_score} - {match.away_score}"
+                status = "[grey]Completed[/]"
+            else:
+                score = "vs"
+                if match.week == current_week:
+                    status = "[yellow]Next Match[/]"
+                else:
+                    status = f"Week {match.week}"
             
             table.add_row(
                 f"Week {match.week}",
                 f"{home_style}{match.home_team}[/]",
-                "vs",
-                f"{away_style}{match.away_team}[/]"
+                score,
+                f"{away_style}{match.away_team}[/]",
+                status
             )
 
         return table
@@ -421,6 +447,48 @@ class GameManager:
         except KeyboardInterrupt:
             return False
 
+    def display_schedule_menu(self):
+        """Handle the schedule view menu and options"""
+        team_only = True  # Start with team schedule by default
+        
+        while True:
+            self.console.clear_screen()
+            self.console.display_header()
+            self.console.console.print("\n[menu_title]Season Schedule[/menu_title]")
+            
+            # Display current filter status
+            filter_status = "[green]Your Team Schedule[/]" if team_only else "[white]Full League Schedule[/]"
+            self.console.console.print(f"\nCurrently showing: {filter_status}")
+            
+            # Display schedule
+            schedule_table = self.display_full_schedule(team_only)
+            if schedule_table:
+                self.console.console.print("\n")
+                self.console.console.print(schedule_table)
+            
+            # Display options
+            self.console.console.print("\n[menu_title]Options[/menu_title]")
+            table = Table(show_header=False, box=None, padding=(0, 1))
+            toggle_text = "Show League Schedule" if team_only else "Show Team Schedule"
+            table.add_row("[menu_option]1.[/menu_option]", f"[white]{toggle_text}[/white]")
+            table.add_row("[menu_option]2.[/menu_option]", "[white]Return to Dashboard[/white]")
+            self.console.console.print(table)
+            
+            try:
+                choice = Prompt.ask(
+                    "\nEnter your choice",
+                    choices=["1", "2"],
+                    show_choices=False
+                )
+                
+                if choice == "1":
+                    team_only = not team_only  # Toggle the filter
+                elif choice == "2":
+                    break
+                    
+            except KeyboardInterrupt:
+                break
+
     def display_dashboard(self):
         """Display the main game dashboard and handle user input"""
         while True:
@@ -439,13 +507,14 @@ class GameManager:
             table.add_row("[menu_option]1.[/menu_option]", "[white]Play Next Game[/white]")
             table.add_row("[menu_option]2.[/menu_option]", "[white]Manage Roster[/white]")
             table.add_row("[menu_option]3.[/menu_option]", "[white]View Standings[/white]")
-            table.add_row("[menu_option]4.[/menu_option]", "[white]Return to Main Menu[/white]")
+            table.add_row("[menu_option]4.[/menu_option]", "[white]View Schedule[/white]")
+            table.add_row("[menu_option]5.[/menu_option]", "[white]Return to Main Menu[/white]")
             self.console.console.print(table)
             
             try:
                 choice = Prompt.ask(
                     "\nEnter your choice",
-                    choices=["1", "2", "3", "4"],
+                    choices=["1", "2", "3", "4", "5"],
                     show_choices=False
                 )
                 
@@ -463,6 +532,8 @@ class GameManager:
                         self.console.console.print(standings_table)
                     input("\nPress Enter to continue...")
                 elif choice == "4":
+                    self.display_schedule_menu()
+                elif choice == "5":
                     break
                     
             except KeyboardInterrupt:
@@ -549,7 +620,7 @@ class GameManager:
             self.console.clear_screen()
             self.console.display_header()
             self.console.console.print("\n[menu_title]Upcoming Matches[/menu_title]")
-            schedule_table = self.display_schedule()
+            schedule_table = self.display_full_schedule()
             if schedule_table:
                 self.console.console.print("\n")
                 self.console.console.print(schedule_table)
