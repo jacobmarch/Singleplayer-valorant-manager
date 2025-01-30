@@ -118,6 +118,10 @@ valorant-team-manager/
 A text-based Valorant team management simulator inspired by Football Manager, focusing on professional esports team management and strategic decision-making.
 
 ## Recent Updates
+- Added main dashboard with roster management and standings view
+- Added ability to cut and replace players and coaches
+- Each team can make one roster change per week
+- Added league standings sorted by wins and team rating
 - Added league management system with team ratings and scheduling
 - Each team now has a rating from 0-100 (normally distributed)
 - Implemented round-robin schedule generation for matches
@@ -126,6 +130,26 @@ A text-based Valorant team management simulator inspired by Football Manager, fo
 - Each team gets 5 players (one for each position) and a coach
 - Each person has a randomly generated name and skill rating (1-100)
 - Added display of team members in formatted tables
+
+## Features
+### Dashboard
+- View current league standings
+- Manage team roster
+- Play next scheduled game (coming soon)
+
+### Roster Management
+- View current team roster with player positions and ratings
+- Cut and replace players while maintaining positions
+- Cut and replace coach
+- Automatic team rating updates after roster changes
+- Three replacement options for each cut player/coach
+
+### League System
+- Team ratings (0-100 scale)
+- Round-robin match scheduling
+- Win/loss record tracking
+- League standings sorted by wins and rating
+- Match history
 
 ## Project Structure
 - `src/game/person.py`: Contains classes and functions for player and coach generation

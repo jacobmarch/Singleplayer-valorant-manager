@@ -134,13 +134,10 @@ class LeagueManager:
         self.schedule = matches
         logging.info(f'Generated {len(matches)} matches for the season')
         
-    def display_upcoming_matches(self, num_matches: int = 5) -> List[Match]:
+    def display_upcoming_matches(self) -> List[Match]:
         """
-        Get the next few upcoming matches, ensuring one match per week is shown
+        Get all upcoming matches, ensuring one match per week is shown
         
-        Args:
-            num_matches: Number of upcoming matches to return
-            
         Returns:
             List of upcoming matches, one per week
         """
@@ -156,6 +153,5 @@ class LeagueManager:
                 # Replace existing match if this one has player's team
                 matches_by_week[match.week] = match
                 
-        # Sort by week and return requested number of matches
-        sorted_matches = sorted(matches_by_week.values(), key=lambda x: x.week)
-        return sorted_matches[:num_matches] 
+        # Sort by week and return all matches
+        return sorted(matches_by_week.values(), key=lambda x: x.week) 
