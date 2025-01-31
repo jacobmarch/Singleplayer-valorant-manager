@@ -5,9 +5,10 @@ from datetime import datetime
 from src.ui.console_manager import ConsoleManager
 from src.game.data import REGIONS, REGION_LIST
 from src.game.person import Player, Coach, generate_team_members
-from src.game.roster import LeagueManager
+from src.game.roster import LeagueManager, Match
 from typing import List, Optional
 import random
+from rich.columns import Columns
 
 class GameManager:
     def __init__(self):
@@ -219,11 +220,18 @@ class GameManager:
         return table
 
     def get_current_week(self) -> int:
-        """Get the current week number based on completed matches"""
+        """Get the current week number based on the first uncompleted week"""
         if not self.league_manager:
             return 1
-        completed_matches = [m for m in self.league_manager.schedule if m.completed]
-        return len(completed_matches) + 1
+            
+        # Sort matches by week and find first uncompleted week
+        sorted_matches = sorted(self.league_manager.schedule, key=lambda x: x.week)
+        for match in sorted_matches:
+            if not match.completed:
+                return match.week
+        
+        # If all matches completed, return last week + 1
+        return sorted_matches[-1].week + 1 if sorted_matches else 1
 
     def can_make_roster_change(self) -> bool:
         """Check if a roster change is allowed this week"""
@@ -489,6 +497,243 @@ class GameManager:
             except KeyboardInterrupt:
                 break
 
+    def simulate_match(self, match) -> tuple[int, int]:
+        """
+        Simulate a single match and determine the score
+        
+        Args:
+            match: The match to simulate
+            
+        Returns:
+            Tuple of (home_score, away_score)
+        """
+        if not self.league_manager:
+            return 0, 0
+            
+        home_rating = self.league_manager.team_ratings[match.home_team].rating
+        away_rating = self.league_manager.team_ratings[match.away_team].rating
+        
+        # Calculate base scores using team ratings and randomness
+        # Teams can score between 0 and 13 rounds
+        home_base = (home_rating / 100) * 13
+        away_base = (away_rating / 100) * 13
+        
+        # Add randomness (-3 to +3 rounds)
+        home_score = max(0, min(13, int(home_base + random.uniform(-3, 3))))
+        away_score = max(0, min(13, int(away_base + random.uniform(-3, 3))))
+        
+        # Ensure no ties
+        if home_score == away_score:
+            if random.random() < 0.5:
+                home_score += 1
+            else:
+                away_score += 1
+                
+        return home_score, away_score
+
+    def simulate_week(self) -> List[Match]:
+        """
+        Simulate all matches for the current week
+        
+        Returns:
+            List of matches that were simulated
+        """
+        if not self.league_manager:
+            return []
+            
+        current_week = self.get_current_week()
+        
+        # Get all matches for the current week
+        current_matches = []
+        for match in sorted(self.league_manager.schedule, key=lambda x: x.week):
+            if match.week == current_week:
+                if match.completed:
+                    logging.warning(f'Found completed match in current week {current_week}')
+                else:
+                    current_matches.append(match)
+            elif match.week < current_week and not match.completed:
+                # This indicates a problem - earlier week has uncompleted matches
+                logging.error(f'Found uncompleted match in week {match.week} while simulating week {current_week}')
+                return []
+        
+        if not current_matches:
+            logging.warning(f'No matches found for week {current_week}')
+            return []
+            
+        simulated_matches = []
+        for match in current_matches:
+            # Simulate the match
+            home_score, away_score = self.simulate_match(match)
+            
+            # Update match data
+            match.completed = True
+            match.home_score = home_score
+            match.away_score = away_score
+            
+            # Update team records
+            home_team = self.league_manager.team_ratings[match.home_team]
+            away_team = self.league_manager.team_ratings[match.away_team]
+            
+            if home_score > away_score:
+                home_team.wins += 1
+                away_team.losses += 1
+            else:
+                away_team.wins += 1
+                home_team.losses += 1
+                
+            simulated_matches.append(match)
+            
+        return simulated_matches
+
+    def display_match_results(self, matches: List[Match], title: str = "Match Results"):
+        """
+        Display the results of simulated matches
+        
+        Args:
+            matches: List of matches to display
+            title: Title for the results table
+        """
+        table = Table(title=title, show_header=True)
+        table.add_column("Home Team", justify="right")
+        table.add_column("Score", justify="center")
+        table.add_column("Away Team", justify="left")
+        
+        for match in matches:
+            home_style = "[green]" if match.home_team == self.selected_team else "[white]"
+            away_style = "[green]" if match.away_team == self.selected_team else "[white]"
+            
+            # Highlight winner
+            if match.home_score > match.away_score:
+                home_style = home_style.replace("]", " bold]")
+            else:
+                away_style = away_style.replace("]", " bold]")
+                
+            table.add_row(
+                f"{home_style}{match.home_team}[/]",
+                f"{match.home_score} - {match.away_score}",
+                f"{away_style}{match.away_team}[/]"
+            )
+            
+        return table
+
+    def display_table_pair(self, left_table, right_table=None):
+        """Display two tables side by side"""
+        tables = [left_table]
+        if right_table:
+            tables.append(right_table)
+        self.console.console.print(Columns(tables, equal=True, expand=True))
+
+    def play_next_week(self):
+        """Handle playing the next week of matches"""
+        if not self.league_manager:
+            return
+            
+        current_week = self.get_current_week()
+        
+        # Check if there are any matches left
+        remaining_matches = [m for m in self.league_manager.schedule if not m.completed]
+        if not remaining_matches:
+            self.console.console.print("[yellow]The season is complete![/yellow]")
+            input("\nPress Enter to continue...")
+            return
+            
+        # Validate current week
+        max_week = max(m.week for m in self.league_manager.schedule)
+        if current_week > max_week:
+            self.console.console.print("[yellow]The season is complete![/yellow]")
+            input("\nPress Enter to continue...")
+            return
+            
+        # Display upcoming matches
+        self.console.clear_screen()
+        self.console.display_header()
+        self.console.console.print(f"\n[menu_title]Week {current_week} Matches[/menu_title]")
+        schedule_table = self.display_full_schedule(team_only=True)
+        if schedule_table:
+            self.console.console.print("\n")
+            self.console.console.print(schedule_table)
+        
+        # Confirm with user
+        if not Prompt.ask(
+            "\nReady to play this week's matches?",
+            choices=["y", "n"],
+            show_choices=False
+        ) == "y":
+            return
+            
+        # Simulate matches
+        simulated_matches = self.simulate_week()
+        if not simulated_matches:
+            self.console.console.print("[error]Error simulating matches. Check the logs for details.[/error]")
+            input("\nPress Enter to continue...")
+            return
+
+        # Prepare all tables we want to show
+        tables_to_show = []
+        
+        # Your team's matches
+        your_matches = [m for m in simulated_matches if self.selected_team in [m.home_team, m.away_team]]
+        if your_matches:
+            your_results_table = self.display_match_results(your_matches, "Your Team's Results")
+            tables_to_show.append(("Your Results", your_results_table))
+        
+        # All matches in a single table
+        other_matches = [m for m in simulated_matches if m not in your_matches]
+        if other_matches:
+            all_results = self.display_match_results(simulated_matches, f"Week {current_week} - All Results")
+            tables_to_show.append(("All Results", all_results))
+        
+        # Standings table
+        standings_table = self.display_standings()
+        if standings_table:
+            tables_to_show.append(("Standings", standings_table))
+            
+        # Display tables one or two at a time
+        for i in range(0, len(tables_to_show), 2):
+            self.console.clear_screen()
+            self.console.display_header()
+            self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
+            
+            # Get current pair of tables
+            left_title, left_table = tables_to_show[i]
+            right_table = None
+            if i + 1 < len(tables_to_show):
+                _, right_table = tables_to_show[i + 1]
+            
+            # Show progress
+            progress = f"View {(i // 2) + 1} of {(len(tables_to_show) + 1) // 2}"
+            self.console.console.print(f"\n[info]{progress}[/info]")
+            
+            # Display the pair of tables
+            self.console.console.print("\n")
+            self.display_table_pair(left_table, right_table)
+            
+            # On last view, show next action options
+            if i + 2 >= len(tables_to_show):
+                self.console.console.print("\n[menu_title]Next Action[/menu_title]")
+                table = Table(show_header=False, box=None, padding=(0, 1))
+                table.add_row("[menu_option]1.[/menu_option]", "[white]View Full Schedule[/white]")
+                table.add_row("[menu_option]2.[/menu_option]", "[white]Return to Dashboard[/white]")
+                self.console.console.print(table)
+                
+                try:
+                    choice = Prompt.ask(
+                        "\nEnter your choice",
+                        choices=["1", "2"],
+                        show_choices=False
+                    )
+                    
+                    if choice == "1":
+                        self.display_schedule_menu()
+                        
+                except KeyboardInterrupt:
+                    pass
+            else:
+                self.console.console.print("\n[info]Press Enter to see next view...[/info]", end="")
+                input()
+            
+        logging.info(f'Completed week {current_week} matches')
+
     def display_dashboard(self):
         """Display the main game dashboard and handle user input"""
         while True:
@@ -504,7 +749,14 @@ class GameManager:
             # Display dashboard options
             self.console.console.print("\n[menu_title]Dashboard[/menu_title]")
             table = Table(show_header=False, box=None, padding=(0, 1))
-            table.add_row("[menu_option]1.[/menu_option]", "[white]Play Next Game[/white]")
+            
+            # Check if season is complete
+            remaining_matches = [m for m in self.league_manager.schedule if not m.completed]
+            if remaining_matches:
+                table.add_row("[menu_option]1.[/menu_option]", "[white]Play Next Week[/white]")
+            else:
+                table.add_row("[menu_option]1.[/menu_option]", "[grey]Season Complete[/grey]")
+                
             table.add_row("[menu_option]2.[/menu_option]", "[white]Manage Roster[/white]")
             table.add_row("[menu_option]3.[/menu_option]", "[white]View Standings[/white]")
             table.add_row("[menu_option]4.[/menu_option]", "[white]View Schedule[/white]")
@@ -519,8 +771,11 @@ class GameManager:
                 )
                 
                 if choice == "1":
-                    self.console.console.print("[yellow]Play Next Game feature coming soon![/yellow]")
-                    input("\nPress Enter to continue...")
+                    if remaining_matches:
+                        self.play_next_week()
+                    else:
+                        self.console.console.print("[yellow]The season is complete![/yellow]")
+                        input("\nPress Enter to continue...")
                 elif choice == "2":
                     self.display_roster_management()
                 elif choice == "3":
