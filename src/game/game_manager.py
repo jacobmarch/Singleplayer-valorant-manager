@@ -540,7 +540,7 @@ class GameManager:
 
     def simulate_match(self, match) -> tuple[int, int]:
         """
-        Simulate a best-of-3 match and determine the winner
+        Simulate a match and determine the winner
         
         Args:
             match: The match to simulate
@@ -558,8 +558,8 @@ class GameManager:
         maps_won_away = 0
         match.map_scores = []  # Reset map scores
         
-        # Simulate maps until a team wins 2
-        while maps_won_home < 2 and maps_won_away < 2:
+        # Simulate maps until a team wins enough maps
+        while maps_won_home < match.maps_needed and maps_won_away < match.maps_needed:
             home_rounds, away_rounds = self.simulate_map(home_rating, away_rating)
             match.map_scores.append((home_rounds, away_rounds))
             
@@ -669,8 +669,13 @@ class GameManager:
         self.console.clear_screen()
         self.console.display_header()
         
-        # Match header
-        self.console.console.print(f"\n[menu_title]{match.home_team} vs {match.away_team} - Week {match.week}[/menu_title]")
+        # Match header with playoff info if applicable
+        title = f"{match.home_team} vs {match.away_team} - Week {match.week}"
+        if match.is_playoff:
+            title = f"{match.playoff_round.title()} - {title}"
+            if match.playoff_round == "final":
+                title = f"GRAND {title}"
+        self.console.console.print(f"\n[menu_title]{title}[/menu_title]")
         
         # Create match summary table
         summary_table = Table(title="Match Summary", show_header=False)
@@ -678,8 +683,23 @@ class GameManager:
         summary_table.add_column("Value")
         
         winner = match.get_winner()
+        maps_needed = match.maps_needed
+        total_maps = "Best of 5" if maps_needed == 3 else "Best of 3"
+        
+        summary_table.add_row("Format", total_maps)
         summary_table.add_row("Final Score", f"{match.home_score} - {match.away_score}")
-        summary_table.add_row("Winner", winner if winner else "Not Played")
+        if winner:
+            winner_style = "[green bold]" if winner == self.selected_team else "[white bold]"
+            summary_table.add_row("Winner", f"{winner_style}{winner}[/]")
+        else:
+            summary_table.add_row("Winner", "Not Played")
+            
+        if match.is_playoff:
+            summary_table.add_row("Match Type", f"Playoff {match.playoff_round.title()}")
+            # Add seed information
+            home_seed = next(t.playoff_seed for t in self.league_manager.playoffs.teams if t.name == match.home_team)
+            away_seed = next(t.playoff_seed for t in self.league_manager.playoffs.teams if t.name == match.away_team)
+            summary_table.add_row("Seeds", f"#{home_seed} vs #{away_seed}")
         
         # Create map details table
         maps_table = Table(title="Map Details", show_header=True)
@@ -722,48 +742,177 @@ class GameManager:
             
         current_week = self.get_current_week()
         
-        # Check if there are any matches left
-        remaining_matches = [m for m in self.league_manager.schedule if not m.completed]
-        if not remaining_matches:
-            self.console.console.print("[yellow]The season is complete![/yellow]")
+        # Check if regular season is complete and playoffs haven't started
+        if not self.league_manager.playoffs and all(m.completed for m in self.league_manager.schedule):
+            self.league_manager.regular_season_complete = True
+            self.league_manager.start_playoffs()
+            current_week += 1  # Start playoffs next week
+            
+            # Show playoff qualification message
+            self.console.clear_screen()
+            self.console.display_header()
+            self.console.console.print("\n[menu_title]Playoff Qualification[/menu_title]")
+            
+            # Get playoff teams and their seeds
+            playoff_teams = sorted(
+                [t for t in self.league_manager.playoffs.teams],
+                key=lambda x: x.playoff_seed
+            )
+            
+            # Create qualification table
+            qual_table = Table(show_header=True)
+            qual_table.add_column("Seed", justify="center")
+            qual_table.add_column("Team")
+            qual_table.add_column("Record", justify="center")
+            qual_table.add_column("Rating", justify="center")
+            
+            for team in playoff_teams:
+                team_style = "[green]" if team.name == self.selected_team else "[white]"
+                qual_table.add_row(
+                    f"#{team.playoff_seed}",
+                    f"{team_style}{team.name}[/]",
+                    f"{team.wins}-{team.losses}",
+                    str(team.rating)
+                )
+            
+            self.console.console.print("\n")
+            self.console.console.print(qual_table)
+            
+            if self.selected_team in [t.name for t in playoff_teams]:
+                seed = next(t.playoff_seed for t in playoff_teams if t.name == self.selected_team)
+                self.console.console.print(f"\n[green]Congratulations! Your team qualified for playoffs as the #{seed} seed![/green]")
+            else:
+                self.console.console.print("\n[yellow]Your team did not qualify for playoffs[/yellow]")
+            
+            # Generate first round of playoff matches
+            simulated_matches = self.league_manager.playoffs.generate_playoff_matches(current_week)
+            
+            self.console.console.print("\nPress Enter to continue...", end="")
+            input()
+            
+        # Get matches to be played (not simulated yet)
+        matches_to_play = []
+        if self.league_manager.playoffs:
+            # Get uncompleted matches from current round
+            matches_to_play = [m for m in self.league_manager.playoffs.matches if not m.completed]
+            
+            # If no uncompleted matches, we need to advance to next round
+            if not matches_to_play and not self.league_manager.playoffs.completed:
+                current_week += 1
+                self.league_manager.playoffs.advance_round()
+                matches_to_play = self.league_manager.playoffs.generate_playoff_matches(current_week)
+                
+                if not matches_to_play and self.league_manager.playoffs.completed:
+                    # Playoffs are complete
+                    champion = self.league_manager.playoffs.champion
+                    self.console.clear_screen()
+                    self.console.display_header()
+                    self.console.console.print("\n[menu_title]Season Complete![/menu_title]")
+                    
+                    champion_style = "[green bold]" if champion == self.selected_team else "[white bold]"
+                    self.console.console.print(f"\n🏆 Congratulations to {champion_style}{champion}[/] - {self.league_manager.region} Champions! 🏆")
+                    input("\nPress Enter to continue...")
+                    return
+        else:
+            # Get regular season matches for current week (not simulated yet)
+            current_week_matches = []
+            for match in sorted(self.league_manager.schedule, key=lambda x: x.week):
+                if match.week == current_week:
+                    if not match.completed:
+                        current_week_matches.append(match)
+                elif match.week < current_week and not match.completed:
+                    logging.error(f'Found uncompleted match in week {match.week} while simulating week {current_week}')
+                    return
+            matches_to_play = current_week_matches
+            
+        if not matches_to_play:
+            self.console.console.print("[error]No matches found for the current week. Check the logs for details.[/error]")
             input("\nPress Enter to continue...")
             return
-            
-        # Validate current week
-        max_week = max(m.week for m in self.league_manager.schedule)
-        if current_week > max_week:
-            self.console.console.print("[yellow]The season is complete![/yellow]")
-            input("\nPress Enter to continue...")
-            return
-            
-        # Display upcoming matches
+
+        # Display upcoming matches and confirm simulation
         self.console.clear_screen()
         self.console.display_header()
-        self.console.console.print(f"\n[menu_title]Week {current_week} Matches[/menu_title]")
-        schedule_table = self.display_full_schedule(team_only=True)
-        if schedule_table:
+        
+        # Show playoff round if applicable
+        if self.league_manager.playoffs:
+            playoff_round = self.league_manager.get_playoff_round_name()
+            round_name = playoff_round.title() if playoff_round else "Playoffs"
+            self.console.console.print(f"\n[menu_title]{round_name} - Week {current_week}[/menu_title]")
+            
+            # Show upcoming matches
+            matches_table = Table(title="Upcoming Matches", show_header=True)
+            matches_table.add_column("Match", justify="center")
+            matches_table.add_column("Teams", justify="center")
+            matches_table.add_column("Format", justify="center")
+            
+            for idx, match in enumerate(matches_to_play, 1):
+                home_style = "[green]" if match.home_team == self.selected_team else "[white]"
+                away_style = "[green]" if match.away_team == self.selected_team else "[white]"
+                format_str = "Best of 5" if match.maps_needed == 3 else "Best of 3"
+                
+                matches_table.add_row(
+                    f"Match {idx}",
+                    f"{home_style}{match.home_team}[/] vs {away_style}{match.away_team}[/]",
+                    format_str
+                )
+            
             self.console.console.print("\n")
-            self.console.console.print(schedule_table)
+            self.console.console.print(matches_table)
+        else:
+            self.console.console.print(f"\n[menu_title]Week {current_week} Matches[/menu_title]")
+            schedule_table = self.display_full_schedule(team_only=True)
+            if schedule_table:
+                self.console.console.print("\n")
+                self.console.console.print(schedule_table)
         
         # Confirm with user
         if not Prompt.ask(
-            "\nReady to play this week's matches?",
+            "\nReady to play matches?",
             choices=["y", "n"],
             show_choices=False
         ) == "y":
             return
+
+        # Now simulate the matches after confirmation
+        simulated_matches = []
+        for match in matches_to_play:
+            home_score, away_score = self.simulate_match(match)
+            match.completed = True
+            match.home_score = home_score
+            match.away_score = away_score
+            simulated_matches.append(match)
             
-        # Simulate matches
-        simulated_matches = self.simulate_week()
-        if not simulated_matches:
-            self.console.console.print("[error]Error simulating matches. Check the logs for details.[/error]")
-            input("\nPress Enter to continue...")
-            return
+            # Update eliminated teams in playoffs immediately
+            if self.league_manager.playoffs:
+                loser = match.get_loser()
+                if loser:
+                    loser_team = next(t for t in self.league_manager.playoffs.teams if t.name == loser)
+                    loser_team.eliminated = True
+                    
+            # Update team records for regular season
+            else:
+                home_team = self.league_manager.team_ratings[match.home_team]
+                away_team = self.league_manager.team_ratings[match.away_team]
+                
+                if home_score > away_score:
+                    home_team.wins += 1
+                    away_team.losses += 1
+                else:
+                    away_team.wins += 1
+                    home_team.losses += 1
 
         # Display results view
         self.console.clear_screen()
         self.console.display_header()
-        self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
+        
+        # Show playoff round if applicable
+        if self.league_manager.playoffs:
+            playoff_round = self.league_manager.get_playoff_round_name()
+            round_name = playoff_round.title() if playoff_round else "Playoffs"
+            self.console.console.print(f"\n[menu_title]{round_name} Results - Week {current_week}[/menu_title]")
+        else:
+            self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
         
         # Your team's matches
         your_matches = [m for m in simulated_matches if self.selected_team in [m.home_team, m.away_team]]
@@ -776,6 +925,40 @@ class GameManager:
         if other_matches:
             self.console.console.print("\n[bold]Other Results[/bold]")
             self.console.console.print(self.display_match_results(other_matches))
+
+        # Show advancing teams immediately after results if a playoff round is complete
+        if self.league_manager.playoffs and all(m.completed for m in simulated_matches):
+            remaining = [t for t in self.league_manager.playoffs.teams if not t.eliminated]
+            if remaining and len(remaining) < len(self.league_manager.playoffs.teams):
+                self.console.console.print("\n[bold]Teams Advancing:[/bold]")
+                
+                advance_table = Table(show_header=True)
+                advance_table.add_column("Seed", justify="center")
+                advance_table.add_column("Team")
+                
+                remaining.sort(key=lambda x: x.playoff_seed)
+                for team in remaining:
+                    team_style = "[green]" if team.name == self.selected_team else "[white]"
+                    advance_table.add_row(
+                        f"#{team.playoff_seed}",
+                        f"{team_style}{team.name}[/]"
+                    )
+                
+                self.console.console.print(advance_table)
+                
+                # Show next round info
+                next_round = ""
+                if playoff_round == "quarterfinal":
+                    next_round = "Semifinals"
+                elif playoff_round == "semifinal":
+                    next_round = "Finals"
+                
+                if next_round:
+                    self.console.console.print(f"\n[bold]Advancing to {next_round}![/bold]")
+                
+                self.console.console.print("\nPress Enter to continue...", end="")
+                input()
+                return
             
         # Display options for match details
         self.console.console.print("\n[menu_title]Options[/menu_title]")
@@ -823,7 +1006,13 @@ class GameManager:
                     # After viewing match details, redisplay the results and options
                     self.console.clear_screen()
                     self.console.display_header()
-                    self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
+                    
+                    if self.league_manager.playoffs:
+                        playoff_round = self.league_manager.get_playoff_round_name()
+                        round_name = playoff_round.title() if playoff_round else "Playoffs"
+                        self.console.console.print(f"\n[menu_title]{round_name} Results - Week {current_week}[/menu_title]")
+                    else:
+                        self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
                     
                     if your_matches:
                         self.console.console.print("\n[bold]Your Team's Results[/bold]")
@@ -839,6 +1028,15 @@ class GameManager:
             except KeyboardInterrupt:
                 break
             
+        # After matches are complete, update eliminated teams in playoffs
+        if self.league_manager.playoffs:
+            for match in simulated_matches:
+                if match.completed:
+                    loser = match.get_loser()
+                    if loser:
+                        loser_team = next(t for t in self.league_manager.playoffs.teams if t.name == loser)
+                        loser_team.eliminated = True
+            
         logging.info(f'Completed week {current_week} matches')
 
     def display_dashboard(self):
@@ -853,16 +1051,49 @@ class GameManager:
                 self.console.console.print("\n")
                 self.console.console.print(standings_table)
             
+            # Display playoff status if applicable
+            if self.league_manager.playoffs:
+                playoff_round = self.league_manager.get_playoff_round_name()
+                if playoff_round:
+                    self.console.console.print(f"\n[bold]{playoff_round.title()} Round[/bold]")
+                    if self.selected_team in [t.name for t in self.league_manager.playoffs.teams if not t.eliminated]:
+                        self.console.console.print("[green]Your team is in the playoffs![/green]")
+                    else:
+                        self.console.console.print("[yellow]Your team did not qualify for playoffs[/yellow]")
+            
             # Display dashboard options
             self.console.console.print("\n[menu_title]Dashboard[/menu_title]")
             table = Table(show_header=False, box=None, padding=(0, 1))
             
             # Check if season is complete
-            remaining_matches = [m for m in self.league_manager.schedule if not m.completed]
-            if remaining_matches:
-                table.add_row("[menu_option]1.[/menu_option]", "[white]Play Next Week[/white]")
-            else:
+            if self.league_manager.playoffs and self.league_manager.playoffs.completed:
+                champion = self.league_manager.playoffs.champion
+                champion_style = "[green bold]" if champion == self.selected_team else "[white bold]"
                 table.add_row("[menu_option]1.[/menu_option]", "[grey]Season Complete[/grey]")
+                table.add_row(
+                    "[info]Champion:[/info]",
+                    f"{champion_style}{champion}[/] - {self.league_manager.region} Champions"
+                )
+            elif self.league_manager.playoffs:
+                # Determine next round text
+                playoff_round = self.league_manager.get_playoff_round_name()
+                next_round = ""
+                if playoff_round == "quarterfinal":
+                    next_round = "Semifinals"
+                elif playoff_round == "semifinal":
+                    next_round = "Finals"
+                elif playoff_round == "final":
+                    next_round = "Championship"
+                else:
+                    next_round = "Next Round"
+                    
+                table.add_row("[menu_option]1.[/menu_option]", f"[white]Advance to {next_round}[/white]")
+            else:
+                remaining_matches = [m for m in self.league_manager.schedule if not m.completed]
+                if remaining_matches:
+                    table.add_row("[menu_option]1.[/menu_option]", "[white]Play Next Week[/white]")
+                else:
+                    table.add_row("[menu_option]1.[/menu_option]", "[white]Start Playoffs[/white]")
                 
             table.add_row("[menu_option]2.[/menu_option]", "[white]Manage Roster[/white]")
             table.add_row("[menu_option]3.[/menu_option]", "[white]View Standings[/white]")
@@ -878,7 +1109,7 @@ class GameManager:
                 )
                 
                 if choice == "1":
-                    if remaining_matches:
+                    if not (self.league_manager.playoffs and self.league_manager.playoffs.completed):
                         self.play_next_week()
                     else:
                         self.console.console.print("[yellow]The season is complete![/yellow]")

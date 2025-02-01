@@ -118,6 +118,10 @@ valorant-team-manager/
 A text-based Valorant team management simulator inspired by Football Manager, focusing on professional esports team management and strategic decision-making.
 
 ## Recent Updates
+- Added playoff system with quarterfinals, semifinals, and finals
+- Best-of-3 matches for regular season and early playoffs
+- Best-of-5 matches for the grand finals
+- Playoff seeding based on regular season record
 - Updated match simulation to use best-of-3 format with proper round scoring
 - Added detailed match view showing map-by-map scores
 - Each map is played to 13 rounds with win-by-2 requirement
@@ -154,9 +158,16 @@ A text-based Valorant team management simulator inspired by Football Manager, fo
 - Win/loss record tracking
 - League standings sorted by wins and rating
 - Match history
+- Playoff system:
+  - Top 8 teams qualify
+  - Single elimination bracket
+  - Seeded by regular season record (1v8, 4v5, 2v7, 3v6)
+  - Best-of-3 matches for quarterfinals and semifinals
+  - Best-of-5 grand finals
 
 ### Match System
-- Best-of-3 match format
+- Best-of-3 match format (regular season and early playoffs)
+- Best-of-5 match format (grand finals)
 - Each map played to 13 rounds
 - Win-by-2 requirement in all maps
 - Overtime system when score reaches 12-12
@@ -165,6 +176,7 @@ A text-based Valorant team management simulator inspired by Football Manager, fo
   - Round counts for each map
   - Match winner and final score
   - Individual map winners
+  - Playoff information and seeding
 
 ## Project Structure
 - `src/game/person.py`: Contains classes and functions for player and coach generation

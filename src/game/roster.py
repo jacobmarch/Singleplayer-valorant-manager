@@ -4,8 +4,8 @@ Manages team ratings and schedule generation for the league.
 
 import random
 import logging
-from dataclasses import dataclass
-from typing import List, Dict, Optional
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from src.game.person import Player, Coach
 
@@ -16,6 +16,8 @@ class TeamRating:
     rating: int
     wins: int = 0
     losses: int = 0
+    playoff_seed: Optional[int] = None
+    eliminated: bool = False
 
 @dataclass
 class Match:
@@ -27,17 +29,28 @@ class Match:
     home_score: int = 0  # Number of maps won
     away_score: int = 0  # Number of maps won
     map_scores: List[tuple[int, int]] = None  # List of (home_rounds, away_rounds) for each map
+    is_playoff: bool = False
+    playoff_round: Optional[str] = None  # "quarterfinal", "semifinal", "final"
+    maps_needed: int = 2  # Default for regular season and early playoffs
     
     def __post_init__(self):
         """Initialize map_scores if not provided"""
         if self.map_scores is None:
             self.map_scores = []
+        if self.is_playoff and self.playoff_round == "final":
+            self.maps_needed = 3  # Best of 5 for finals
             
     def get_winner(self) -> Optional[str]:
         """Returns the name of the winning team, or None if match not completed"""
         if not self.completed:
             return None
         return self.home_team if self.home_score > self.away_score else self.away_team
+    
+    def get_loser(self) -> Optional[str]:
+        """Returns the name of the losing team, or None if match not completed"""
+        if not self.completed:
+            return None
+        return self.away_team if self.home_score > self.away_score else self.home_team
     
     def get_map_score_display(self) -> str:
         """Returns a formatted string of map scores"""
@@ -48,6 +61,92 @@ class Match:
         for i, (home_rounds, away_rounds) in enumerate(self.map_scores, 1):
             map_displays.append(f"Map {i}: {home_rounds}-{away_rounds}")
         return " | ".join(map_displays)
+
+@dataclass
+class Playoffs:
+    """Manages playoff bracket and progression"""
+    teams: List[TeamRating]
+    current_round: str = "quarterfinal"  # "quarterfinal", "semifinal", "final"
+    matches: List[Match] = field(default_factory=list)
+    completed: bool = False
+    champion: Optional[str] = None
+    
+    def generate_playoff_matches(self, week: int) -> List[Match]:
+        """Generate matches for the current playoff round"""
+        matches = []
+        
+        if self.current_round == "quarterfinal":
+            # 1v8, 4v5, 2v7, 3v6 matchups
+            # Sort teams by seed to ensure proper matchups
+            sorted_teams = sorted(self.teams, key=lambda x: x.playoff_seed)
+            matchups = [
+                (sorted_teams[0], sorted_teams[7]),  # 1 vs 8
+                (sorted_teams[3], sorted_teams[4]),  # 4 vs 5
+                (sorted_teams[1], sorted_teams[6]),  # 2 vs 7
+                (sorted_teams[2], sorted_teams[5])   # 3 vs 6
+            ]
+            
+            for higher_seed, lower_seed in matchups:
+                match = Match(
+                    home_team=higher_seed.name,
+                    away_team=lower_seed.name,
+                    week=week,
+                    is_playoff=True,
+                    playoff_round=self.current_round
+                )
+                matches.append(match)
+                
+        elif self.current_round == "semifinal":
+            # Get non-eliminated teams and sort by seed
+            remaining = [t for t in self.teams if not t.eliminated]
+            remaining.sort(key=lambda x: x.playoff_seed)
+            
+            # Create semifinal matchups (winners of 1v8/4v5 and 2v7/3v6)
+            matchups = [
+                (remaining[0], remaining[1]),
+                (remaining[2], remaining[3])
+            ]
+            
+            for higher_seed, lower_seed in matchups:
+                match = Match(
+                    home_team=higher_seed.name,
+                    away_team=lower_seed.name,
+                    week=week,
+                    is_playoff=True,
+                    playoff_round=self.current_round
+                )
+                matches.append(match)
+                
+        else:  # final
+            # Get the two remaining teams
+            finalists = [t for t in self.teams if not t.eliminated]
+            finalists.sort(key=lambda x: x.playoff_seed)
+            
+            if len(finalists) == 2:
+                match = Match(
+                    home_team=finalists[0].name,
+                    away_team=finalists[1].name,
+                    week=week,
+                    is_playoff=True,
+                    playoff_round=self.current_round
+                )
+                matches.append(match)
+        
+        # Clear previous matches and add new ones
+        self.matches = matches
+        return matches
+    
+    def advance_round(self) -> None:
+        """Advance to the next playoff round"""
+        if self.current_round == "quarterfinal":
+            self.current_round = "semifinal"
+        elif self.current_round == "semifinal":
+            self.current_round = "final"
+        else:
+            self.completed = True
+            # Find champion from the final match
+            final_match = next(m for m in self.matches if m.playoff_round == "final")
+            self.champion = final_match.get_winner()
 
 class LeagueManager:
     def __init__(self, region: str, teams: List[str], player_team: str, players: Optional[List[Player]] = None, coach: Optional[Coach] = None):
@@ -65,6 +164,8 @@ class LeagueManager:
         self.player_team = player_team
         self.team_ratings: Dict[str, TeamRating] = {}
         self.schedule: List[Match] = []
+        self.playoffs: Optional[Playoffs] = None
+        self.regular_season_complete = False
         
         # Generate ratings for all teams
         self._generate_team_ratings(teams, players, coach)
@@ -176,4 +277,29 @@ class LeagueManager:
                 matches_by_week[match.week] = match
                 
         # Sort by week and return all matches
-        return sorted(matches_by_week.values(), key=lambda x: x.week) 
+        return sorted(matches_by_week.values(), key=lambda x: x.week)
+
+    def start_playoffs(self) -> None:
+        """Initialize playoffs with top 8 teams"""
+        if not self.regular_season_complete:
+            return
+            
+        # Sort teams by wins (and rating for tiebreaker) to determine playoff seeds
+        playoff_teams = sorted(
+            self.team_ratings.values(),
+            key=lambda x: (x.wins, x.rating),
+            reverse=True
+        )[:8]
+        
+        # Assign playoff seeds
+        for seed, team in enumerate(playoff_teams, 1):
+            team.playoff_seed = seed
+            
+        self.playoffs = Playoffs(teams=playoff_teams)
+        logging.info('Playoffs initialized with top 8 teams')
+        
+    def get_playoff_round_name(self) -> Optional[str]:
+        """Get the current playoff round name, or None if not in playoffs"""
+        if not self.playoffs:
+            return None
+        return self.playoffs.current_round 
