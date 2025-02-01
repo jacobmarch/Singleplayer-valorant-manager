@@ -926,40 +926,6 @@ class GameManager:
             self.console.console.print("\n[bold]Other Results[/bold]")
             self.console.console.print(self.display_match_results(other_matches))
 
-        # Show advancing teams immediately after results if a playoff round is complete
-        if self.league_manager.playoffs and all(m.completed for m in simulated_matches):
-            remaining = [t for t in self.league_manager.playoffs.teams if not t.eliminated]
-            if remaining and len(remaining) < len(self.league_manager.playoffs.teams):
-                self.console.console.print("\n[bold]Teams Advancing:[/bold]")
-                
-                advance_table = Table(show_header=True)
-                advance_table.add_column("Seed", justify="center")
-                advance_table.add_column("Team")
-                
-                remaining.sort(key=lambda x: x.playoff_seed)
-                for team in remaining:
-                    team_style = "[green]" if team.name == self.selected_team else "[white]"
-                    advance_table.add_row(
-                        f"#{team.playoff_seed}",
-                        f"{team_style}{team.name}[/]"
-                    )
-                
-                self.console.console.print(advance_table)
-                
-                # Show next round info
-                next_round = ""
-                if playoff_round == "quarterfinal":
-                    next_round = "Semifinals"
-                elif playoff_round == "semifinal":
-                    next_round = "Finals"
-                
-                if next_round:
-                    self.console.console.print(f"\n[bold]Advancing to {next_round}![/bold]")
-                
-                self.console.console.print("\nPress Enter to continue...", end="")
-                input()
-                return
-            
         # Display options for match details
         self.console.console.print("\n[menu_title]Options[/menu_title]")
         table = Table(show_header=False, box=None, padding=(0, 1))
@@ -1027,6 +993,46 @@ class GameManager:
                     
             except KeyboardInterrupt:
                 break
+            
+        # Show advancing teams after match details if a playoff round is complete
+        if self.league_manager.playoffs and all(m.completed for m in simulated_matches):
+            remaining = [t for t in self.league_manager.playoffs.teams if not t.eliminated]
+            if remaining and len(remaining) < len(self.league_manager.playoffs.teams):
+                self.console.clear_screen()
+                self.console.display_header()
+                
+                playoff_round = self.league_manager.get_playoff_round_name()
+                round_name = playoff_round.title() if playoff_round else "Playoffs"
+                self.console.console.print(f"\n[menu_title]{round_name} Complete![/menu_title]")
+                
+                self.console.console.print("\n[bold]Teams Advancing:[/bold]")
+                
+                advance_table = Table(show_header=True)
+                advance_table.add_column("Seed", justify="center")
+                advance_table.add_column("Team")
+                
+                remaining.sort(key=lambda x: x.playoff_seed)
+                for team in remaining:
+                    team_style = "[green]" if team.name == self.selected_team else "[white]"
+                    advance_table.add_row(
+                        f"#{team.playoff_seed}",
+                        f"{team_style}{team.name}[/]"
+                    )
+                
+                self.console.console.print(advance_table)
+                
+                # Show next round info
+                next_round = ""
+                if playoff_round == "quarterfinal":
+                    next_round = "Semifinals"
+                elif playoff_round == "semifinal":
+                    next_round = "Finals"
+                
+                if next_round:
+                    self.console.console.print(f"\n[bold]Advancing to {next_round}![/bold]")
+                
+                self.console.console.print("\nPress Enter to continue...", end="")
+                input()
             
         # After matches are complete, update eliminated teams in playoffs
         if self.league_manager.playoffs:
