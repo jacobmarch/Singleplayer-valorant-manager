@@ -24,8 +24,30 @@ class Match:
     away_team: str
     week: int
     completed: bool = False
-    home_score: int = 0
-    away_score: int = 0
+    home_score: int = 0  # Number of maps won
+    away_score: int = 0  # Number of maps won
+    map_scores: List[tuple[int, int]] = None  # List of (home_rounds, away_rounds) for each map
+    
+    def __post_init__(self):
+        """Initialize map_scores if not provided"""
+        if self.map_scores is None:
+            self.map_scores = []
+            
+    def get_winner(self) -> Optional[str]:
+        """Returns the name of the winning team, or None if match not completed"""
+        if not self.completed:
+            return None
+        return self.home_team if self.home_score > self.away_score else self.away_team
+    
+    def get_map_score_display(self) -> str:
+        """Returns a formatted string of map scores"""
+        if not self.map_scores:
+            return "Not Played"
+        
+        map_displays = []
+        for i, (home_rounds, away_rounds) in enumerate(self.map_scores, 1):
+            map_displays.append(f"Map {i}: {home_rounds}-{away_rounds}")
+        return " | ".join(map_displays)
 
 class LeagueManager:
     def __init__(self, region: str, teams: List[str], player_team: str, players: Optional[List[Player]] = None, coach: Optional[Coach] = None):

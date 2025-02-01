@@ -497,15 +497,56 @@ class GameManager:
             except KeyboardInterrupt:
                 break
 
+    def simulate_map(self, home_rating: int, away_rating: int) -> tuple[int, int]:
+        """
+        Simulate a single map and determine the score
+        
+        Args:
+            home_rating: Rating of home team (0-100)
+            away_rating: Rating of away team (0-100)
+            
+        Returns:
+            Tuple of (home_rounds, away_rounds)
+        """
+        # Calculate base win probability from ratings
+        rating_diff = home_rating - away_rating
+        home_win_prob = 0.5 + (rating_diff * 0.005)  # Each 10 rating difference is 5% advantage
+        
+        home_rounds = 0
+        away_rounds = 0
+        
+        # Simulate rounds until a team wins
+        while True:
+            # Need 13 rounds to win, and must win by 2
+            if (home_rounds >= 13 or away_rounds >= 13) and abs(home_rounds - away_rounds) >= 2:
+                break
+                
+            # If 12-12, continue until someone wins by 2
+            if home_rounds == 12 and away_rounds == 12:
+                # Simulate one round at a time
+                if random.random() < home_win_prob:
+                    home_rounds += 1
+                else:
+                    away_rounds += 1
+                continue
+            
+            # Normal round simulation
+            if random.random() < home_win_prob:
+                home_rounds += 1
+            else:
+                away_rounds += 1
+                
+        return home_rounds, away_rounds
+
     def simulate_match(self, match) -> tuple[int, int]:
         """
-        Simulate a single match and determine the score
+        Simulate a best-of-3 match and determine the winner
         
         Args:
             match: The match to simulate
             
         Returns:
-            Tuple of (home_score, away_score)
+            Tuple of (maps_won_home, maps_won_away)
         """
         if not self.league_manager:
             return 0, 0
@@ -513,23 +554,25 @@ class GameManager:
         home_rating = self.league_manager.team_ratings[match.home_team].rating
         away_rating = self.league_manager.team_ratings[match.away_team].rating
         
-        # Calculate base scores using team ratings and randomness
-        # Teams can score between 0 and 13 rounds
-        home_base = (home_rating / 100) * 13
-        away_base = (away_rating / 100) * 13
+        maps_won_home = 0
+        maps_won_away = 0
+        match.map_scores = []  # Reset map scores
         
-        # Add randomness (-3 to +3 rounds)
-        home_score = max(0, min(13, int(home_base + random.uniform(-3, 3))))
-        away_score = max(0, min(13, int(away_base + random.uniform(-3, 3))))
-        
-        # Ensure no ties
-        if home_score == away_score:
-            if random.random() < 0.5:
-                home_score += 1
+        # Simulate maps until a team wins 2
+        while maps_won_home < 2 and maps_won_away < 2:
+            home_rounds, away_rounds = self.simulate_map(home_rating, away_rating)
+            match.map_scores.append((home_rounds, away_rounds))
+            
+            if home_rounds > away_rounds:
+                maps_won_home += 1
             else:
-                away_score += 1
+                maps_won_away += 1
                 
-        return home_score, away_score
+        logging.info(f'Match simulated: {match.home_team} vs {match.away_team} - Maps: {maps_won_home}-{maps_won_away}')
+        for i, (home_rounds, away_rounds) in enumerate(match.map_scores, 1):
+            logging.info(f'Map {i}: {home_rounds}-{away_rounds}')
+            
+        return maps_won_home, maps_won_away
 
     def simulate_week(self) -> List[Match]:
         """
@@ -616,6 +659,55 @@ class GameManager:
             
         return table
 
+    def display_match_details(self, match: Match):
+        """
+        Display detailed information about a specific match
+        
+        Args:
+            match: The match to display details for
+        """
+        self.console.clear_screen()
+        self.console.display_header()
+        
+        # Match header
+        self.console.console.print(f"\n[menu_title]{match.home_team} vs {match.away_team} - Week {match.week}[/menu_title]")
+        
+        # Create match summary table
+        summary_table = Table(title="Match Summary", show_header=False)
+        summary_table.add_column("Label", style="bold")
+        summary_table.add_column("Value")
+        
+        winner = match.get_winner()
+        summary_table.add_row("Final Score", f"{match.home_score} - {match.away_score}")
+        summary_table.add_row("Winner", winner if winner else "Not Played")
+        
+        # Create map details table
+        maps_table = Table(title="Map Details", show_header=True)
+        maps_table.add_column("Map", justify="center")
+        maps_table.add_column(match.home_team, justify="center")
+        maps_table.add_column("Score", justify="center")
+        maps_table.add_column(match.away_team, justify="center")
+        
+        for i, (home_rounds, away_rounds) in enumerate(match.map_scores, 1):
+            winner_style = "[green bold]" if home_rounds > away_rounds else "[white]"
+            loser_style = "[white]" if home_rounds > away_rounds else "[green bold]"
+            
+            maps_table.add_row(
+                f"Map {i}",
+                f"{winner_style if home_rounds > away_rounds else loser_style}{match.home_team}[/]",
+                f"{home_rounds} - {away_rounds}",
+                f"{loser_style if home_rounds > away_rounds else winner_style}{match.away_team}[/]"
+            )
+        
+        # Display tables
+        self.console.console.print("\n")
+        self.console.console.print(summary_table)
+        self.console.console.print("\n")
+        self.console.console.print(maps_table)
+        
+        self.console.console.print("\n[info]Press Enter to continue...[/info]", end="")
+        input()
+
     def display_table_pair(self, left_table, right_table=None):
         """Display two tables side by side"""
         tables = [left_table]
@@ -668,69 +760,84 @@ class GameManager:
             input("\nPress Enter to continue...")
             return
 
-        # Prepare all tables we want to show
-        tables_to_show = []
+        # Display results view
+        self.console.clear_screen()
+        self.console.display_header()
+        self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
         
         # Your team's matches
         your_matches = [m for m in simulated_matches if self.selected_team in [m.home_team, m.away_team]]
         if your_matches:
-            your_results_table = self.display_match_results(your_matches, "Your Team's Results")
-            tables_to_show.append(("Your Results", your_results_table))
+            self.console.console.print("\n[bold]Your Team's Results[/bold]")
+            self.console.console.print(self.display_match_results(your_matches))
         
-        # All matches in a single table
+        # All other matches
         other_matches = [m for m in simulated_matches if m not in your_matches]
         if other_matches:
-            all_results = self.display_match_results(simulated_matches, f"Week {current_week} - All Results")
-            tables_to_show.append(("All Results", all_results))
+            self.console.console.print("\n[bold]Other Results[/bold]")
+            self.console.console.print(self.display_match_results(other_matches))
+            
+        # Display options for match details
+        self.console.console.print("\n[menu_title]Options[/menu_title]")
+        table = Table(show_header=False, box=None, padding=(0, 1))
         
-        # Standings table
-        standings_table = self.display_standings()
-        if standings_table:
-            tables_to_show.append(("Standings", standings_table))
-            
-        # Display tables one or two at a time
-        for i in range(0, len(tables_to_show), 2):
-            self.console.clear_screen()
-            self.console.display_header()
-            self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
-            
-            # Get current pair of tables
-            left_title, left_table = tables_to_show[i]
-            right_table = None
-            if i + 1 < len(tables_to_show):
-                _, right_table = tables_to_show[i + 1]
-            
-            # Show progress
-            progress = f"View {(i // 2) + 1} of {(len(tables_to_show) + 1) // 2}"
-            self.console.console.print(f"\n[info]{progress}[/info]")
-            
-            # Display the pair of tables
-            self.console.console.print("\n")
-            self.display_table_pair(left_table, right_table)
-            
-            # On last view, show next action options
-            if i + 2 >= len(tables_to_show):
-                self.console.console.print("\n[menu_title]Next Action[/menu_title]")
-                table = Table(show_header=False, box=None, padding=(0, 1))
-                table.add_row("[menu_option]1.[/menu_option]", "[white]View Full Schedule[/white]")
-                table.add_row("[menu_option]2.[/menu_option]", "[white]Return to Dashboard[/white]")
-                self.console.console.print(table)
+        # Reorder matches to put player's match first
+        ordered_matches = []
+        if your_matches:
+            ordered_matches.extend(your_matches)
+        ordered_matches.extend(other_matches)
+        
+        # Add options for viewing match details
+        for idx, match in enumerate(ordered_matches, 1):
+            is_player_match = self.selected_team in [match.home_team, match.away_team]
+            option_style = "[green]" if is_player_match else "[white]"
+            match_text = f"{match.home_team} vs {match.away_team}"
+            if is_player_match:
+                match_text = f"{match_text} (Your Match)"
                 
-                try:
-                    choice = Prompt.ask(
-                        "\nEnter your choice",
-                        choices=["1", "2"],
-                        show_choices=False
-                    )
+            table.add_row(
+                f"[menu_option]{idx}.[/menu_option]",
+                f"{option_style}{match_text}[/]"
+            )
+        table.add_row("[menu_option]s.[/menu_option]", "[white]View Full Schedule[/white]")
+        table.add_row("[menu_option]x.[/menu_option]", "[white]Return to Dashboard[/white]")
+        self.console.console.print(table)
+        
+        while True:
+            try:
+                choices = [str(i) for i in range(1, len(ordered_matches) + 1)] + ["s", "x"]
+                choice = Prompt.ask(
+                    "\nEnter your choice",
+                    choices=choices,
+                    show_choices=False
+                )
+                
+                if choice == "x":
+                    break
+                elif choice == "s":
+                    self.display_schedule_menu()
+                else:
+                    match_idx = int(choice) - 1
+                    self.display_match_details(ordered_matches[match_idx])
                     
-                    if choice == "1":
-                        self.display_schedule_menu()
+                    # After viewing match details, redisplay the results and options
+                    self.console.clear_screen()
+                    self.console.display_header()
+                    self.console.console.print(f"\n[menu_title]Week {current_week} Results[/menu_title]")
+                    
+                    if your_matches:
+                        self.console.console.print("\n[bold]Your Team's Results[/bold]")
+                        self.console.console.print(self.display_match_results(your_matches))
+                    
+                    if other_matches:
+                        self.console.console.print("\n[bold]Other Results[/bold]")
+                        self.console.console.print(self.display_match_results(other_matches))
                         
-                except KeyboardInterrupt:
-                    pass
-            else:
-                self.console.console.print("\n[info]Press Enter to see next view...[/info]", end="")
-                input()
+                    self.console.console.print("\n[menu_title]Options[/menu_title]")
+                    self.console.console.print(table)
+                    
+            except KeyboardInterrupt:
+                break
             
         logging.info(f'Completed week {current_week} matches')
 
