@@ -6,6 +6,7 @@ from src.ui.console_manager import ConsoleManager
 from src.game.data import REGIONS, REGION_LIST
 from src.game.person import Player, Coach, generate_team_members
 from src.game.roster import LeagueManager, Match
+from src.game.season_history import SeasonHistory
 from typing import List, Optional
 import random
 from rich.columns import Columns
@@ -21,6 +22,7 @@ class GameManager:
         self.first_names = []
         self.last_names = []
         self.last_roster_change_week = 0  # Track the week of last roster change
+        self.season_history = SeasonHistory()  # Add season history tracking
         
         # Load name data
         try:
@@ -735,6 +737,45 @@ class GameManager:
             tables.append(right_table)
         self.console.console.print(Columns(tables, equal=True, expand=True))
 
+    def display_history(self):
+        """Display the history of all completed seasons"""
+        self.console.clear_screen()
+        self.console.display_header()
+        
+        if not self.season_history.seasons:
+            self.console.console.print("\n[yellow]No completed seasons yet[/yellow]")
+            self.console.console.print("\nPress Enter to return to dashboard...", end="")
+            input()
+            return
+            
+        self.console.console.print("\n[menu_title]Season History[/menu_title]")
+        
+        table = Table(show_header=True)
+        table.add_column("Year", justify="center")
+        table.add_column("Region")
+        table.add_column("Champion")
+        table.add_column("Champion Record", justify="center")
+        table.add_column("Your Team")
+        table.add_column("Your Record", justify="center")
+        table.add_column("Position", justify="center")
+        
+        for season in self.season_history.get_season_history():
+            champion_style = "[green bold]" if season.champion == season.player_team else "[white]"
+            table.add_row(
+                str(season.year),
+                season.region,
+                f"{champion_style}{season.champion}[/]",
+                f"{season.champion_record[0]}-{season.champion_record[1]}",
+                season.player_team,
+                f"{season.player_record[0]}-{season.player_record[1]}",
+                f"#{season.player_position}"
+            )
+            
+        self.console.console.print("\n")
+        self.console.console.print(table)
+        self.console.console.print("\nPress Enter to return to dashboard...", end="")
+        input()
+
     def play_next_week(self):
         """Handle playing the next week of matches"""
         if not self.league_manager:
@@ -805,13 +846,92 @@ class GameManager:
                 if not matches_to_play and self.league_manager.playoffs.completed:
                     # Playoffs are complete
                     champion = self.league_manager.playoffs.champion
+                    champion_team = self.league_manager.team_ratings[champion]
+                    player_team = self.league_manager.team_ratings[self.selected_team]
+                    
+                    # Get player's final position
+                    sorted_teams = sorted(
+                        self.league_manager.team_ratings.values(),
+                        key=lambda x: (x.wins, x.rating),
+                        reverse=True
+                    )
+                    player_position = next(i for i, t in enumerate(sorted_teams, 1) if t.name == self.selected_team)
+                    
+                    # Add season to history
+                    self.season_history.add_season(
+                        region=self.league_manager.region,
+                        champion=champion,
+                        champion_record=(champion_team.wins, champion_team.losses),
+                        player_team=self.selected_team,
+                        player_record=(player_team.wins, player_team.losses),
+                        player_position=player_position
+                    )
+                    
+                    # Display season complete message
                     self.console.clear_screen()
                     self.console.display_header()
                     self.console.console.print("\n[menu_title]Season Complete![/menu_title]")
                     
                     champion_style = "[green bold]" if champion == self.selected_team else "[white bold]"
                     self.console.console.print(f"\n🏆 Congratulations to {champion_style}{champion}[/] - {self.league_manager.region} Champions! 🏆")
-                    input("\nPress Enter to continue...")
+                    
+                    # Start new season with same team and roster
+                    self.console.console.print("\nPress Enter to start the next season...", end="")
+                    input()
+                    
+                    # Keep region, team, and roster but reset league
+                    current_players = self.players
+                    current_coach = self.coach
+                    self.league_manager = LeagueManager(
+                        region=self.selected_region,
+                        teams=REGIONS[self.selected_region],
+                        player_team=self.selected_team,
+                        players=current_players,
+                        coach=current_coach
+                    )
+                    self.league_manager.generate_schedule()
+                    self.last_roster_change_week = 0
+                    
+                    # Show new season message
+                    self.console.clear_screen()
+                    self.console.display_header()
+                    self.console.console.print(f"\n[green]Starting {self.season_history.current_year} Season with {self.selected_team}![/green]")
+                    
+                    # Display team members
+                    players_table, coach_table = self.display_team_members()
+                    self.console.console.print("\n")
+                    self.console.console.print(players_table)
+                    self.console.console.print("\n")
+                    self.console.console.print(coach_table)
+                    
+                    # Wait for user input before showing league ratings
+                    self.console.console.print("\n[info]Press Enter to view league ratings...[/info]", end="")
+                    input()
+                    
+                    # Display league information
+                    self.console.clear_screen()
+                    self.console.display_header()
+                    self.console.console.print("\n[menu_title]League Overview[/menu_title]")
+                    ratings_table = self.display_team_ratings()
+                    if ratings_table:
+                        self.console.console.print("\n")
+                        self.console.console.print(ratings_table)
+                    
+                    # Wait for user input before showing schedule
+                    self.console.console.print("\n[info]Press Enter to view upcoming matches...[/info]", end="")
+                    input()
+                    
+                    # Display schedule
+                    self.console.clear_screen()
+                    self.console.display_header()
+                    self.console.console.print("\n[menu_title]Upcoming Matches[/menu_title]")
+                    schedule_table = self.display_full_schedule()
+                    if schedule_table:
+                        self.console.console.print("\n")
+                        self.console.console.print(schedule_table)
+                    
+                    self.console.console.print("\nPress Enter to continue to dashboard...", end="")
+                    input()
                     return
         else:
             # Get regular season matches for current week (not simulated yet)
@@ -824,7 +944,7 @@ class GameManager:
                     logging.error(f'Found uncompleted match in week {match.week} while simulating week {current_week}')
                     return
             matches_to_play = current_week_matches
-            
+
         if not matches_to_play:
             self.console.console.print("[error]No matches found for the current week. Check the logs for details.[/error]")
             input("\nPress Enter to continue...")
@@ -1104,13 +1224,14 @@ class GameManager:
             table.add_row("[menu_option]2.[/menu_option]", "[white]Manage Roster[/white]")
             table.add_row("[menu_option]3.[/menu_option]", "[white]View Standings[/white]")
             table.add_row("[menu_option]4.[/menu_option]", "[white]View Schedule[/white]")
-            table.add_row("[menu_option]5.[/menu_option]", "[white]Return to Main Menu[/white]")
+            table.add_row("[menu_option]5.[/menu_option]", "[white]View History[/white]")
+            table.add_row("[menu_option]6.[/menu_option]", "[white]Return to Main Menu[/white]")
             self.console.console.print(table)
             
             try:
                 choice = Prompt.ask(
                     "\nEnter your choice",
-                    choices=["1", "2", "3", "4", "5"],
+                    choices=["1", "2", "3", "4", "5", "6"],
                     show_choices=False
                 )
                 
@@ -1133,6 +1254,8 @@ class GameManager:
                 elif choice == "4":
                     self.display_schedule_menu()
                 elif choice == "5":
+                    self.display_history()
+                elif choice == "6":
                     break
                     
             except KeyboardInterrupt:

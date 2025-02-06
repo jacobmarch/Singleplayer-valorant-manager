@@ -143,7 +143,16 @@ A text-based Valorant team management simulator inspired by Football Manager, fo
 ### Dashboard
 - View current league standings
 - Manage team roster
-- Play next scheduled game (coming soon)
+- Play next scheduled game
+- View season history
+- Track multiple seasons with the same team
+
+### Season History
+- Track all completed seasons
+- View champions and their records
+- Track your team's performance across seasons
+- Year-by-year progression
+- Final standings positions
 
 ### Roster Management
 - View current team roster with player positions and ratings
