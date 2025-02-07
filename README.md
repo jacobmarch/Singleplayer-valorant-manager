@@ -23,10 +23,20 @@ valorant-team-manager/
 │ ├── utils/
 │ │ └── logger.py # Logging system
 │ └── game/
-│ │ └── game_manager.py # Core game engine
-│ │ └── data.py # Game data
-│ │ └── person.py # Player and coach generation
-│ │ └── roster.py # League management and scheduling
+│ │ ├── game_manager.py # Core game engine
+│ │ ├── data.py # Game data
+│ │ ├── person.py # Player and coach generation
+│ │ ├── roster/
+│ │ │ ├── __init__.py
+│ │ │ ├── league.py # League management and scheduling
+│ │ │ └── roster_manager.py # Team roster management
+│ │ ├── simulation/
+│ │ │ ├── __init__.py
+│ │ │ └── match_simulator.py # Match simulation logic
+│ │ └── ui/
+│ │ ├── __init__.py
+│ │ ├── display_manager.py # Game display formatting
+│ │ └── menu_manager.py # Menu system
 ├── main.py # Entry point
 └── README.md
 
@@ -39,7 +49,11 @@ valorant-team-manager/
 | UI Manager | `console_manager.py` | Terminal rendering, user input, display formatting |
 | Logger | `logger.py` | Error tracking, event logging, debugging support |
 | Player and Coach | `person.py` | Classes and functions for player and coach generation |
-| League Manager | `roster.py` | Team ratings, match scheduling, league management |
+| League Manager | `roster/league.py` | Team ratings, match scheduling, league management |
+| Roster Manager | `roster/roster_manager.py` | Team roster management and changes |
+| Match Simulator | `simulation/match_simulator.py` | Match simulation and scoring |
+| Display Manager | `ui/display_manager.py` | Game display formatting |
+| Menu Manager | `ui/menu_manager.py` | Menu system and user input |
 
 ### Design Principles
 - Strict separation of concerns (UI/Logic/Utils)
@@ -190,7 +204,11 @@ A text-based Valorant team management simulator inspired by Football Manager, fo
 ## Project Structure
 - `src/game/person.py`: Contains classes and functions for player and coach generation
 - `src/game/game_manager.py`: Main game management logic
-- `src/game/roster.py`: League management and scheduling system
+- `src/game/roster/league.py`: League management and scheduling system
+- `src/game/roster/roster_manager.py`: Team roster management and changes
+- `src/game/simulation/match_simulator.py`: Match simulation and scoring
+- `src/game/ui/display_manager.py`: Game display formatting
+- `src/game/ui/menu_manager.py`: Menu system and user input
 - `data/`: Contains name data files for generating random names
 
 ## Requirements

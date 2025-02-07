@@ -1,50 +1,62 @@
-from dataclasses import dataclass, field
+"""
+Manages the history of completed seasons.
+"""
+
+from dataclasses import dataclass
 from typing import List, Dict, Optional
-import logging
 
 @dataclass
-class SeasonRecord:
-    """Represents a single season's record"""
+class Season:
+    """Represents a completed season"""
     year: int
-    region: str
     champion: str
-    champion_record: tuple[int, int]  # (wins, losses)
-    player_team: str
-    player_record: tuple[int, int]  # (wins, losses)
-    player_position: int  # Final position in standings
+    champion_wins: int
+    champion_losses: int
+    team_name: str
+    team_wins: int
+    team_losses: int
+    team_position: int
 
-@dataclass
 class SeasonHistory:
-    """Manages the history of all seasons played"""
-    seasons: List[SeasonRecord] = field(default_factory=list)
-    current_year: int = 2024  # Start with current year
-    
-    def add_season(self, region: str, champion: str, champion_record: tuple[int, int],
-                  player_team: str, player_record: tuple[int, int], player_position: int) -> None:
+    def __init__(self):
+        self.seasons: List[Season] = []
+        self.current_year = 1
+
+    def add_season(self, champion: str, champion_record: tuple[int, int], 
+                  team_name: str, team_record: tuple[int, int], team_position: int) -> None:
         """
-        Add a completed season to the history
+        Add a completed season to history
         
         Args:
-            region: The region the season was played in
-            champion: The team that won the championship
-            champion_record: Tuple of (wins, losses) for the champion
-            player_team: The team controlled by the player
-            player_record: Tuple of (wins, losses) for the player's team
-            player_position: The final position the player's team finished in
+            champion: Name of champion team
+            champion_record: Tuple of (wins, losses) for champion
+            team_name: Name of player's team
+            team_record: Tuple of (wins, losses) for player's team
+            team_position: Final position of player's team
         """
-        season = SeasonRecord(
+        season = Season(
             year=self.current_year,
-            region=region,
             champion=champion,
-            champion_record=champion_record,
-            player_team=player_team,
-            player_record=player_record,
-            player_position=player_position
+            champion_wins=champion_record[0],
+            champion_losses=champion_record[1],
+            team_name=team_name,
+            team_wins=team_record[0],
+            team_losses=team_record[1],
+            team_position=team_position
         )
         self.seasons.append(season)
         self.current_year += 1
-        logging.info(f'Added season {self.current_year-1} to history: {champion} won championship')
-        
-    def get_season_history(self) -> List[SeasonRecord]:
-        """Get all seasons in chronological order"""
-        return sorted(self.seasons, key=lambda x: x.year) 
+
+    def get_season_history(self) -> List[Dict]:
+        """Get list of season history for display"""
+        return [
+            {
+                'number': s.year,
+                'champion': s.champion,
+                'champion_record': f"{s.champion_wins}-{s.champion_losses}",
+                'team_position': s.team_position,
+                'team_wins': s.team_wins,
+                'team_losses': s.team_losses
+            }
+            for s in self.seasons
+        ] 

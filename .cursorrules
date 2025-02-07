@@ -6,3 +6,5 @@ When making changes to the code, only make changes to the code that are necessar
 Always add logging and comments to the code to explain the changes. Explanantions should be made so that the code can be easily referenced by an engineer.
 
 All code should be modularized for easy reference and readability. Focus on creating a clean and organized codebase.
+
+Make everything as modular as possible. If something does not have a clear fit in an existing module, create a new module. If a single file is becoming too long, refactor it into multiple files.

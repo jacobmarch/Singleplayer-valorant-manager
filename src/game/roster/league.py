@@ -137,7 +137,17 @@ class Playoffs:
         return matches
     
     def advance_round(self) -> None:
-        """Advance to the next playoff round"""
+        """Advance to the next playoff round and update eliminated teams"""
+        # Update eliminated teams based on match results
+        for match in self.matches:
+            if match.completed:
+                loser = match.get_loser()
+                for team in self.teams:
+                    if team.name == loser:
+                        team.eliminated = True
+                        break
+        
+        # Advance to next round
         if self.current_round == "quarterfinal":
             self.current_round = "semifinal"
         elif self.current_round == "semifinal":
@@ -255,51 +265,35 @@ class LeagueManager:
             current_week += 1
             
         self.schedule = matches
-        logging.info(f'Generated {len(matches)} matches for the season')
+        logging.info(f'Generated {len(matches)} matches over {current_week-1} weeks')
         
-    def display_upcoming_matches(self) -> List[Match]:
-        """
-        Get all upcoming matches, ensuring one match per week is shown
-        
-        Returns:
-            List of upcoming matches, one per week
-        """
-        upcoming = [m for m in self.schedule if not m.completed]
-        
-        # Get one match per week, prioritizing matches with the player's team
-        matches_by_week = {}
-        for match in upcoming:
-            if match.week not in matches_by_week:
-                matches_by_week[match.week] = match
-            elif (self.player_team in [match.home_team, match.away_team] and 
-                  self.player_team not in [matches_by_week[match.week].home_team, matches_by_week[match.week].away_team]):
-                # Replace existing match if this one has player's team
-                matches_by_week[match.week] = match
-                
-        # Sort by week and return all matches
-        return sorted(matches_by_week.values(), key=lambda x: x.week)
-
     def start_playoffs(self) -> None:
         """Initialize playoffs with top 8 teams"""
         if not self.regular_season_complete:
             return
             
-        # Sort teams by wins (and rating for tiebreaker) to determine playoff seeds
+        # Sort teams by wins (then rating for tiebreaker) to determine playoff seeds
         playoff_teams = sorted(
             self.team_ratings.values(),
             key=lambda x: (x.wins, x.rating),
             reverse=True
-        )[:8]
+        )[:8]  # Take top 8 teams
         
         # Assign playoff seeds
         for seed, team in enumerate(playoff_teams, 1):
             team.playoff_seed = seed
+            team.eliminated = False  # Reset elimination status
             
         self.playoffs = Playoffs(teams=playoff_teams)
         logging.info('Playoffs initialized with top 8 teams')
         
+        # Generate first round of playoff matches
+        current_week = max(m.week for m in self.schedule) + 1
+        self.playoffs.generate_playoff_matches(current_week)
+        logging.info(f'Generated quarterfinal matches for week {current_week}')
+        
     def get_playoff_round_name(self) -> Optional[str]:
-        """Get the current playoff round name, or None if not in playoffs"""
+        """Get the current playoff round name, or None if playoffs haven't started"""
         if not self.playoffs:
             return None
         return self.playoffs.current_round 
