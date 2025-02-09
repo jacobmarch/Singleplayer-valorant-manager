@@ -158,39 +158,32 @@ class GameManager:
             return
 
     def display_dashboard(self):
-        """Display the main game dashboard and handle user input"""
+        """Display the main dashboard menu"""
         while True:
             self.console.clear_screen()
             self.console.display_header()
             
-            # Display current standings
-            standings_table = self.display_manager.display_standings(
-                self.league_manager.team_ratings,
+            # Show current season info
+            current_year = 2023 + self.season_history.current_year
+            self.console.console.print(f"\n[menu_title]Season {self.season_history.current_year} ({current_year})[/menu_title]")
+            
+            # Show team info
+            team_info = self.display_manager.display_team_info(
+                self.league_manager.team_ratings[self.selected_team],
                 self.selected_team,
                 self.selected_region
             )
-            if standings_table:
+            if team_info:
                 self.console.console.print("\n")
-                self.console.console.print(standings_table)
+                self.console.console.print(team_info)
             
-            # Display playoff status if applicable
-            if self.league_manager.playoffs:
-                playoff_round = self.league_manager.get_playoff_round_name()
-                if playoff_round:
-                    self.console.console.print(f"\n[bold]{playoff_round.title()} Round[/bold]")
-                    if self.selected_team in [t.name for t in self.league_manager.playoffs.teams if not t.eliminated]:
-                        self.console.console.print("[green]Your team is in the playoffs![/green]")
-                    else:
-                        self.console.console.print("[yellow]Your team did not qualify for playoffs[/yellow]")
-            
-            # Display dashboard options and handle input
-            self.console.console.print("\n[menu_title]Dashboard[/menu_title]")
             choice = self.menu_manager.display_dashboard_menu(
                 is_playoffs=bool(self.league_manager.playoffs),
                 playoffs_completed=bool(self.league_manager.playoffs and self.league_manager.playoffs.completed)
             )
             
-            if choice == "1" and not (self.league_manager.playoffs and self.league_manager.playoffs.completed):
+            if choice == "1":
+                # Allow playing next week even if playoffs are completed - it will start new season
                 self.play_next_week()
             elif choice == "2":
                 self.display_roster_management()
@@ -350,8 +343,10 @@ class GameManager:
         # Get matches to be played
         matches_to_play = self._get_matches_to_play(current_week)
         if not matches_to_play:
-            self.console.console.print("[error]No matches found for the current week. Check the logs for details.[/error]")
-            input("\nPress Enter to continue...")
+            # Only show error if we're not transitioning between seasons
+            if not (self.league_manager.playoffs and self.league_manager.playoffs.completed):
+                self.console.console.print("[error]No matches found for the current week. Check the logs for details.[/error]")
+                input("\nPress Enter to continue...")
             return
 
         # Display upcoming matches and confirm simulation
@@ -400,11 +395,17 @@ class GameManager:
         if self.league_manager.playoffs:
             matches = [m for m in self.league_manager.playoffs.matches if not m.completed]
             if not matches and not self.league_manager.playoffs.completed:
-                # Handle advancement before generating new matches
-                self._handle_playoff_advancement()
+                # Advance to next playoff round
                 current_week += 1
                 self.league_manager.playoffs.advance_round()
-                matches = self.league_manager.playoffs.generate_playoff_matches(current_week)
+                
+                # Generate new matches if playoffs aren't completed
+                if not self.league_manager.playoffs.completed:
+                    matches = self.league_manager.playoffs.generate_playoff_matches(current_week)
+                else:
+                    # Handle season completion if playoffs are done
+                    self._handle_season_completion()
+                    return []  # Return empty list to avoid error message
         else:
             matches = [m for m in self.league_manager.schedule if m.week == current_week and not m.completed]
         return matches
@@ -484,10 +485,6 @@ class GameManager:
                     break
             except KeyboardInterrupt:
                 break
-            
-        # Handle playoff advancement if needed
-        if self.league_manager.playoffs and all(m.completed for m in simulated_matches):
-            self._handle_playoff_advancement()
 
     def _show_match_details(self, matches: List[Match]):
         """Show detailed view of matches"""
@@ -527,40 +524,9 @@ class GameManager:
             except KeyboardInterrupt:
                 break
 
-    def _handle_playoff_advancement(self):
-        """Handle playoff advancement and season completion"""
-        remaining = [t for t in self.league_manager.playoffs.teams if not t.eliminated]
-        if remaining and len(remaining) < len(self.league_manager.playoffs.teams):
-            self.console.clear_screen()
-            self.console.display_header()
-            
-            playoff_round = self.league_manager.get_playoff_round_name()
-            round_name = playoff_round.title() if playoff_round else "Playoffs"
-            self.console.console.print(f"\n[menu_title]{round_name} Complete![/menu_title]")
-            
-            advance_table = self.display_manager.display_playoff_advancement(remaining, self.selected_team)
-            self.console.console.print("\n[bold]Teams Advancing:[/bold]")
-            self.console.console.print(advance_table)
-            
-            # Show next round info
-            next_round = ""
-            if playoff_round == "quarterfinal":
-                next_round = "Semifinals"
-            elif playoff_round == "semifinal":
-                next_round = "Finals"
-            
-            if next_round:
-                self.console.console.print(f"\n[bold]Advancing to {next_round}![/bold]")
-            
-            self.console.console.print("\nPress Enter to continue...", end="")
-            input()
-            
-            # If playoffs are complete, handle season transition
-            if self.league_manager.playoffs.completed:
-                self._handle_season_completion()
-
     def _handle_season_completion(self):
         """Handle the completion of a season and transition to the next"""
+        # Display championship celebration screen
         self.console.clear_screen()
         self.console.display_header()
         
@@ -568,6 +534,34 @@ class GameManager:
         champion = self.league_manager.playoffs.champion
         champion_team = self.league_manager.team_ratings[champion]
         champion_record = (champion_team.wins, champion_team.losses)
+        
+        # Calculate padding for champion name to ensure banner stays aligned
+        name_padding = max(0, (34 - len(champion))) // 2
+        left_padding = 24 + name_padding
+        right_padding = 34 - len(champion) - name_padding
+        
+        # Create championship banner with proper alignment
+        self.console.console.print("\n")
+        self.console.console.print("[bold yellow]" + "*" * 60 + "[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * 58 + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * 20 + "[bold green]CHAMPIONS![/bold green]" + " " * 28 + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * 58 + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * left_padding + f"[bold cyan]{champion}[/bold cyan]" + " " * right_padding + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * 22 + f"[cyan]Season {2023 + self.season_history.current_year}[/cyan]" + " " * 24 + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * 21 + f"[cyan]Record: {champion_record[0]}-{champion_record[1]}[/cyan]" + " " * 23 + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]*[/bold yellow]" + " " * 58 + "[bold yellow]*[/bold yellow]")
+        self.console.console.print("[bold yellow]" + "*" * 60 + "[/bold yellow]")
+        
+        # Add celebration message for player's team
+        if champion == self.selected_team:
+            self.console.console.print("\n[bold green]Congratulations! Your team are the champions![/bold green]")
+        
+        self.console.console.print("\nPress Enter to view season summary...", end="")
+        input()
+        
+        # Display regular season summary
+        self.console.clear_screen()
+        self.console.display_header()
         
         # Get player team info
         player_team = self.league_manager.team_ratings[self.selected_team]

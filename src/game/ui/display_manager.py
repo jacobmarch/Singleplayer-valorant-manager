@@ -329,4 +329,28 @@ class DisplayManager:
                 style="green" if season['champion'] == selected_team else None
             )
 
+        return table
+
+    def display_team_info(self, team_rating: 'TeamRating', selected_team: str, region: str) -> Table:
+        """Display team information in a formatted table"""
+        table = Table(title=f"{selected_team} - {region}")
+        table.add_column("Record", justify="center")
+        table.add_column("Rating", justify="center")
+        table.add_column("Status", justify="left")
+        
+        # Get playoff status if in playoffs
+        playoff_status = ""
+        if hasattr(team_rating, 'playoff_seed') and team_rating.playoff_seed:
+            playoff_status = f"Playoff Seed: #{team_rating.playoff_seed}"
+        elif hasattr(team_rating, 'eliminated') and team_rating.eliminated:
+            playoff_status = "Eliminated"
+        else:
+            playoff_status = "Regular Season"
+            
+        table.add_row(
+            f"{team_rating.wins}-{team_rating.losses}",
+            str(team_rating.rating),
+            playoff_status
+        )
+        
         return table 
